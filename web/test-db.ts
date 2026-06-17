@@ -1,0 +1,1 @@
+﻿const { PrismaClient } = require("@prisma/client"); const p = new PrismaClient(); p.role.findFirst({ where: { name: "user" } }).then(r => { console.log("ROLE:", JSON.stringify(r)); p.$disconnect(); }).catch(e => { console.log("ERROR:", e.message); p.$disconnect(); })

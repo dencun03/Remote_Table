@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          Int     @id @default(autoincrement()) @map("roleid")
+  name        String  @unique @map("rolename") @db.VarChar(50)
+  description String? @db.Text
+
+  users User[]
+
+  @@map("roles")
+}
+
+model Status {
+  id          Int    @id @default(autoincrement()) @map("statusid")
+  name        String  @map("statusname") @db.VarChar(50)
+  category    String  @db.VarChar(50)
+  description String? @db.Text
+
+  computers RemoteComputer[]
+  sessions  Session[]
+  chats     Chat[]
+
+  @@unique([name, category])
+  @@map("statuses")
+}
+
+model MessageType {
+  id   Int    @id @default(autoincrement()) @map("messagetypeid")
+  name String @unique @map("messagetypename") @db.VarChar(50)
+
+  messages Message[]
+
+  @@map("messagetypes")
+}
+
+model Permission {
+  id   Int    @id @default(autoincrement()) @map("permissionid")
+  name String @unique @map("permissionname") @db.VarChar(50)
+
+  accessRights AccessRight[]
+
+  @@map("permissions")
+}
+
+model User {
+  id           Int      @id @default(autoincrement()) @map("userid")
+  username     String   @unique @map("username") @db.VarChar(100)
+  email        String   @unique @map("email") @db.VarChar(255)
+  passwordHash String   @map("passwordhash") @db.VarChar(256)
+  roleId       Int      @map("roleid")
+  isActive     Boolean  @default(true) @map("isactive")
+  avatar       String?  @db.VarChar(500)
+  createdAt    DateTime @default(now()) @map("createdat")
+  updatedAt    DateTime @updatedAt @map("updatedat")
+  lastLogin    DateTime? @map("lastlogin")
+
+  role             Role             @relation(fields: [roleId], references: [id])
+  sessions         Session[]
+  sentMessages     Message[]        @relation("MessageSender")
+  chatMemberships  ChatParticipant[]
+  accessRights     AccessRight[]
+  actionLogs       ActionLog[]
+  createdTickets   Ticket[]         @relation("TicketCreator")
+  assignedTickets  Ticket[]         @relation("TicketSpecialist")
+
+  @@map("users")
+}
+
+model RemoteComputer {
+  id        Int      @id @default(autoincrement()) @map("remotecomputerid")
+  name      String   @map("name") @db.VarChar(100)
+  ipAddress String?  @map("ipaddress") @db.VarChar(45)
+  statusId  Int      @map("statusid")
+  createdAt DateTime @default(now()) @map("createdat")
+  updatedAt DateTime @updatedAt @map("updatedat")
+
+  status       Status   @relation(fields: [statusId], references: [id])
+  devices      Device[]
+  sessions     Session[]
+  accessRights AccessRight[]
+
+  @@map("remotecomputers")
+}
+
+model Device {
+  id               Int      @id @default(autoincrement()) @map("deviceid")
+  remoteComputerId Int      @map("remotecomputerid")
+  deviceType       String   @map("devicetype") @db.VarChar(50)
+  os               String?  @map("os") @db.VarChar(50)
+  appVersion       String?  @map("appversion") @db.VarChar(20)
+  uniqueDeviceId   String?  @unique @map("uniquedeviceid") @db.VarChar(100)
+  description      String?  @db.Text
+  lastSeenAt       DateTime? @map("lastseenat")
+
+  remoteComputer RemoteComputer @relation(fields: [remoteComputerId], references: [id], onDelete: Cascade)
+
+  @@map("devices")
+}
+
+model Ticket {
+  id           String    @id @default(cuid())
+  title        String
+  description  String    @db.Text
+  category     String    @default("other") @db.VarChar(50)
+  priority     Int       @default(2)
+  status       String    @default("pending") @db.VarChar(30)
+  createdAt    DateTime  @default(now()) @map("createdat")
+  updatedAt    DateTime  @updatedAt @map("updatedat")
+  resolvedAt   DateTime? @map("resolvedat")
+
+  creatorId    Int?     @map("creatorid")
+  specialistId Int?     @map("specialistid")
+
+  creator    User?   @relation("TicketCreator",    fields: [creatorId],    references: [id], onDelete: SetNull)
+  specialist User?   @relation("TicketSpecialist",  fields: [specialistId], references: [id], onDelete: SetNull)
+  sessions   Session[]
+  chat       Chat?
+
+  @@map("tickets")
+}
+
+model Session {
+  id               Int       @id @default(autoincrement()) @map("sessionid")
+  userId           Int       @map("userid")
+  remoteComputerId Int       @map("remotecomputerid")
+  ticketId         String?   @map("ticketid")
+  startTime        DateTime  @default(now()) @map("starttime")
+  endTime          DateTime? @map("endtime")
+  durationSeconds  Int?      @map("durationseconds")
+  clientIp         String?   @map("clientip") @db.VarChar(45)
+  statusId         Int       @map("statusid")
+  notes            String?   @db.Text
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  remoteComputer RemoteComputer @relation(fields: [remoteComputerId], references: [id])
+  ticket         Ticket?        @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  status         Status         @relation(fields: [statusId], references: [id])
+  actionLogs     ActionLog[]
+
+  @@map("sessions")
+}
+
+model Chat {
+  id        Int      @id @default(autoincrement()) @map("chatid")
+  ticketId  String?  @unique @map("ticketid")
+  createdAt DateTime @default(now()) @map("createdat")
+  statusId  Int      @map("statusid")
+
+  ticket       Ticket?          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  status       Status           @relation(fields: [statusId], references: [id])
+  participants ChatParticipant[]
+  messages     Message[]
+
+  @@map("chats")
+}
+
+model ChatParticipant {
+  id     Int @id @default(autoincrement()) @map("chatparticipantid")
+  chatId Int @map("chatid")
+  userId Int @map("userid")
+  role   String @db.VarChar(50)
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
+  @@map("chatparticipants")
+}
+
+model Message {
+  id            Int      @id @default(autoincrement()) @map("messageid")
+  chatId        Int      @map("chatid")
+  senderId      Int      @map("senderid")
+  messageTypeId Int      @map("messagetypeid")
+  content       String   @map("content") @db.Text
+  sentAt        DateTime @default(now()) @map("sentat")
+  isRead        Boolean  @default(false) @map("isread")
+
+  chat        Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender      User        @relation("MessageSender", fields: [senderId], references: [id])
+  messageType MessageType @relation(fields: [messageTypeId], references: [id])
+
+  @@index([chatId])
+  @@index([sentAt])
+  @@map("messages")
+}
+
+model AccessRight {
+  id              Int      @id @default(autoincrement()) @map("accessrightid")
+  userId          Int      @map("userid")
+  remoteComputerId Int      @map("remotecomputerid")
+  permissionId    Int      @map("permissionid")
+  grantedAt       DateTime @default(now()) @map("grantedat")
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  remoteComputer RemoteComputer @relation(fields: [remoteComputerId], references: [id], onDelete: Cascade)
+  permission     Permission     @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, remoteComputerId, permissionId])
+  @@map("accessrights")
+}
+
+model ActionLog {
+  id         Int      @id @default(autoincrement()) @map("logid")
+  eventType  String   @map("eventtype") @db.VarChar(100)
+  eventTime  DateTime @default(now()) @map("eventtime")
+  userId     Int?     @map("userid")
+  sessionId  Int?     @map("sessionid")
+  description String? @db.Text
+  details    String?  @db.Text
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([eventTime])
+  @@map("logs")
+}
