@@ -34,6 +34,15 @@ const PYTHON_PATHS = {
   relayServer: path.join(__dirname, '..', 'network', 'relay_server.py'),
   clientApp: path.join(__dirname, '..', 'client', 'client_app.py'),
   specialistApp: path.join(__dirname, '..', 'specialist', 'specialist_app.py'),
+  // Скрипты удалённого управления экраном
+  controlServer: path.join(__dirname, 'python', 'server_1.py'),
+  controlClient: path.join(__dirname, 'python', 'client_1.py'),
+}
+
+/** Порты удалённого управления */
+const CONTROL_PORTS = {
+  client: 6969,   // TCP — соединение client_1.py → server_1.py
+  http: 8080,     // HTTP — MJPEG-стрим + команды от браузера
 }
 
 // ==================== Состояние приложения ====================
@@ -453,6 +462,68 @@ function setupIpcHandlers() {
     nodeVersion: process.versions.node,
     pythonCommand: getPythonCommand(),
   }))
+
+  // === Удалённое управление экраном ===
+
+  // Запуск server_1.py на стороне специалиста
+  ipcMain.handle('control:startServer', () => {
+    const result = startPythonProcess('controlServer', PYTHON_PATHS.controlServer, [
+      String(CONTROL_PORTS.client),
+      String(CONTROL_PORTS.http),
+    ])
+    return result
+  })
+
+  // Остановка server_1.py
+  ipcMain.handle('control:stopServer', () => {
+    return stopPythonProcess('controlServer')
+  })
+
+  // Запуск client_1.py на стороне клиента
+  // args: [host, port]
+  ipcMain.handle('control:startClient', (_, { host, port }) => {
+    const args = [host || '127.0.0.1', String(port || CONTROL_PORTS.client)]
+    return startPythonProcess('controlClient', PYTHON_PATHS.controlClient, args)
+  })
+
+  // Остановка client_1.py
+  ipcMain.handle('control:stopClient', () => {
+    return stopPythonProcess('controlClient')
+  })
+
+  // Получение локального IP-адреса (для передачи клиенту)
+  ipcMain.handle('control:getLocalIP', () => {
+    const os = require('os')
+    const interfaces = os.networkInterfaces()
+    const candidates = []
+
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name] || []) {
+        // Пропускаем loopback и IPv6 link-local
+        if (iface.family === 'IPv4' && !iface.internal) {
+          candidates.push(iface.address)
+        }
+      }
+    }
+
+    // Предпочитаем 192.168.x.x / 10.x.x.x / 172.16-31.x.x
+    const local = candidates.find(ip =>
+      ip.startsWith('192.168.') || ip.startsWith('10.') ||
+      ip.startsWith('172.16.') || ip.startsWith('172.17.') ||
+      ip.startsWith('172.18.') || ip.startsWith('172.19.') ||
+      ip.startsWith('172.2') || ip.startsWith('172.3')
+    )
+
+    return {
+      ip: local || candidates[0] || '127.0.0.1',
+      all: candidates,
+    }
+  })
+
+  // Проверка, запущен ли процесс
+  ipcMain.handle('control:isRunning', (_, { name }) => {
+    return { running: !!childProcesses[name] }
+  })
 }
 
 // ==================== Splash-окно загрузки ====================

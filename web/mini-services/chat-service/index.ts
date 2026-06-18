@@ -105,7 +105,7 @@ io.on('connection', (socket) => {
     }
   })
 
-  // ─── Screen Share Request ────────────────────────────────────────────
+  // ─── Screen Share Request (legacy WebRTC — kept for backward compat) ───
 
   // Specialist requests screen access from client
   socket.on('request-screen-share', (data: { sessionId: string; userId: string; username: string }) => {
@@ -130,6 +130,44 @@ io.on('connection', (socket) => {
   // Specialist cancels screen share request
   socket.on('cancel-screen-share-request', (data: { sessionId: string }) => {
     socket.to(`session:${data.sessionId}`).emit('screen-share-request-cancelled', {
+      sessionId: data.sessionId,
+    })
+  })
+
+  // ─── Remote Control (Python server_1.py / client_1.py) ────────────────
+
+  // Specialist requests remote control — sends IP to client
+  socket.on('control-request', (data: { sessionId: string; specialistIP: string; specialistName?: string }) => {
+    console.log(`[Control] Request for session:${data.sessionId} from ${data.specialistName} (IP: ${data.specialistIP})`)
+    socket.to(`session:${data.sessionId}`).emit('control-request', {
+      sessionId: data.sessionId,
+      specialistIP: data.specialistIP,
+      specialistName: data.specialistName,
+    })
+  })
+
+  // Client responds to control request
+  socket.on('control-response', (data: { sessionId: string; accepted: boolean; userId: string }) => {
+    console.log(`[Control] Response for session:${data.sessionId} — ${data.accepted ? 'accepted' : 'rejected'}`)
+    socket.to(`session:${data.sessionId}`).emit('control-response', {
+      sessionId: data.sessionId,
+      accepted: data.accepted,
+      userId: data.userId,
+    })
+  })
+
+  // Specialist cancels control request
+  socket.on('control-cancel', (data: { sessionId: string }) => {
+    console.log(`[Control] Cancel for session:${data.sessionId}`)
+    socket.to(`session:${data.sessionId}`).emit('control-cancel', {
+      sessionId: data.sessionId,
+    })
+  })
+
+  // Specialist stops control
+  socket.on('control-stopped', (data: { sessionId: string }) => {
+    console.log(`[Control] Stopped for session:${data.sessionId}`)
+    socket.to(`session:${data.sessionId}`).emit('control-stopped', {
       sessionId: data.sessionId,
     })
   })

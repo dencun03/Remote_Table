@@ -33,7 +33,6 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { useRemotableStore } from '@/lib/store'
-import { useScreenShareClient } from '@/hooks/use-screen-share-client'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -112,6 +111,15 @@ export function ClientSessionView() {
   const [shareRequestCountdown, setShareRequestCountdown] = useState(30)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Remote control state (Python client_1.py)
+  const [pendingControlRequest, setPendingControlRequest] = useState<{
+    sessionId: string
+    specialistIP: string
+    specialistName?: string
+  } | null>(null)
+  const [controlActive, setControlActive] = useState(false)
+  const [controlError, setControlError] = useState<string | null>(null)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -127,7 +135,11 @@ export function ClientSessionView() {
           (s: ActiveSession) => s.role === 'client'
         )
         if (clientSession) {
-          setSession(clientSession)
+          // Обновляем только если сессия изменилась — избегаем лишних ререндеров
+          setSession((prev) => {
+            if (prev && prev.id === clientSession.id) return prev
+            return clientSession
+          })
         }
       }
     } catch {
@@ -135,14 +147,27 @@ export function ClientSessionView() {
     }
   }, [currentUser])
 
-  // ── Load session on mount ──
+  // ── Load session on mount + poll every 5 seconds ──
+  // Поллинг нужен: клиент может прийти на страницу до того, как специалист
+  // создал сессию. Тогда session = null, и нужно периодически проверять.
   useEffect(() => {
+    let cancelled = false
+
     async function init() {
       setLoading(true)
       await fetchActiveSession()
       setLoading(false)
     }
     init()
+
+    const interval = setInterval(() => {
+      if (!cancelled) fetchActiveSession()
+    }, 5_000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [fetchActiveSession])
 
   // When session is found, load messages
@@ -230,14 +255,16 @@ export function ClientSessionView() {
       })
     })
 
-    // ── Specialist requests screen share ──
-    socketIo.on('screen-share-requested', () => {
+    // ── Specialist requests remote control ──
+    socketIo.on('control-request', (data: { sessionId: string; specialistIP: string; specialistName?: string }) => {
+      console.log('[Client] Control request from specialist', data)
+      setPendingControlRequest(data)
       setShowShareRequest(true)
       setShareRequestCountdown(30)
       addNotification({
         type: 'info',
-        title: 'Запрос доступа к экрану',
-        message: 'Специалист запрашивает доступ к вашему экрану',
+        title: 'Запрос удалённого управления',
+        message: `Специалист ${data.specialistName || ''} запрашивает управление вашим экраном`,
       })
 
       if (countdownRef.current) clearInterval(countdownRef.current)
@@ -246,11 +273,12 @@ export function ClientSessionView() {
           if (prev <= 1) {
             if (countdownRef.current) clearInterval(countdownRef.current)
             setShowShareRequest(false)
-            socketIo.emit('screen-share-response', {
+            socketIo.emit('control-response', {
               sessionId: session.id,
               accepted: false,
               userId: currentUser?.id,
             })
+            setPendingControlRequest(null)
             return 0
           }
           return prev - 1
@@ -259,9 +287,25 @@ export function ClientSessionView() {
     })
 
     // Specialist cancelled the request
-    socketIo.on('screen-share-request-cancelled', () => {
+    socketIo.on('control-cancel', () => {
       if (countdownRef.current) clearInterval(countdownRef.current)
       setShowShareRequest(false)
+      setPendingControlRequest(null)
+    })
+
+    // Specialist stopped control
+    socketIo.on('control-stopped', () => {
+      console.log('[Client] Specialist stopped control')
+      setControlActive(false)
+      // Останавливаем client_1.py
+      if (window.electronAPI?.control?.stopClient) {
+        window.electronAPI.control.stopClient().catch(() => {})
+      }
+      addNotification({
+        type: 'info',
+        title: 'Управление остановлено',
+        message: 'Специалист прекратил удалённое управление',
+      })
     })
 
     socketRef.current = socketIo
@@ -336,38 +380,88 @@ export function ClientSessionView() {
     }
   }, [session?.ticketId, connected, currentUser])
 
-  // ── Screen sharing (client) ──
-  const { startSharing, stopSharing, isSharing, isConnecting, error: shareError } = useScreenShareClient(
-    socket,
-    session?.id ?? null,
-  )
-
-  // ── Handle share accept/reject (called from dialog buttons) ──
-  const handleShareAccept = () => {
+  // ── Handle control accept: запуск client_1.py ──
+  const handleShareAccept = async () => {
     if (countdownRef.current) clearInterval(countdownRef.current)
     setShowShareRequest(false)
+
     const sock = socketRef.current
     if (sock && session?.id) {
-      sock.emit('screen-share-response', {
+      sock.emit('control-response', {
         sessionId: session.id,
         accepted: true,
         userId: currentUser?.id,
       })
     }
-    startSharing()
+
+    // Запуск client_1.py через Electron IPC
+    if (!pendingControlRequest) {
+      setControlError('Нет данных о специалисте')
+      return
+    }
+
+    setControlError(null)
+    try {
+      const api = window.electronAPI
+      if (!api?.control?.startClient) {
+        throw new Error('Удалённое управление доступно только в десктоп-приложении (Electron)')
+      }
+
+      const result = await api.control.startClient(
+        pendingControlRequest.specialistIP,
+        6969,
+      )
+
+      if (!result.success) {
+        throw new Error(result.message || 'Не удалось запустить клиент управления')
+      }
+
+      setControlActive(true)
+      addNotification({
+        type: 'success',
+        title: 'Управление начато',
+        message: `Специалист ${pendingControlRequest.specialistName || ''} теперь видит ваш экран`,
+      })
+    } catch (err) {
+      setControlError(err instanceof Error ? err.message : 'Ошибка запуска')
+      addNotification({
+        type: 'error',
+        title: 'Ошибка',
+        message: err instanceof Error ? err.message : 'Не удалось запустить клиент управления',
+      })
+    }
+
+    setPendingControlRequest(null)
   }
 
+  // ── Handle control reject ──
   const handleShareReject = () => {
     if (countdownRef.current) clearInterval(countdownRef.current)
     setShowShareRequest(false)
     const sock = socketRef.current
     if (sock && session?.id) {
-      sock.emit('screen-share-response', {
+      sock.emit('control-response', {
         sessionId: session.id,
         accepted: false,
         userId: currentUser?.id,
       })
     }
+    setPendingControlRequest(null)
+  }
+
+  // ── Stop control manually ──
+  const handleStopControl = async () => {
+    try {
+      await window.electronAPI?.control?.stopClient()
+    } catch {
+      // silent
+    }
+    setControlActive(false)
+    addNotification({
+      type: 'info',
+      title: 'Трансляция остановлена',
+      message: 'Вы остановили трансляцию экрана',
+    })
   }
 
   // ── Send message ──
@@ -435,7 +529,11 @@ export function ClientSessionView() {
 
   // ── End session ──
   const handleEndSession = () => {
-    stopSharing()
+    // Останавливаем client_1.py если активен
+    if (controlActive) {
+      window.electronAPI?.control?.stopClient().catch(() => {})
+      setControlActive(false)
+    }
     if (session?.id) {
       fetch(`/api/sessions/${session.id}`, {
         method: 'PATCH',
@@ -485,18 +583,24 @@ export function ClientSessionView() {
     )
   }
 
-  // ── No active session ──
+  // ── No active session (waiting for specialist to start) ──
   if (!session) {
     return (
       <div className="flex h-full min-h-[400px] flex-col items-center justify-center">
         <div className="flex flex-col items-center text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-            <MonitorPlay className="h-8 w-8 text-muted-foreground/40" />
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
+            <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
           </div>
-          <h2 className="text-lg font-medium text-foreground/80">Нет активного сеанса</h2>
+          <h2 className="text-lg font-medium text-foreground/80">
+            Ожидание начала сеанса
+          </h2>
           <p className="mt-2 max-w-md text-sm text-muted-foreground/70">
-            В данный момент нет активного сеанса удалённого доступа.
-            Когда специалист начнёт сеанс, информация появится здесь.
+            Специалист готовится к сеансу удалённого доступа.
+            Как только сеанс начнётся, вы сможете общаться в чате
+            и специалист сможет запросить доступ к вашему экрану.
+          </p>
+          <p className="mt-3 text-xs text-muted-foreground/50">
+            Страница обновится автоматически...
           </p>
           <Button
             onClick={() => setCurrentView('client-dashboard')}
@@ -539,7 +643,7 @@ export function ClientSessionView() {
                   >
                     Специалист
                   </Badge>
-                  {isSharing ? (
+                  {controlActive ? (
                     <span className="flex items-center gap-1 text-[10px] text-red-400">
                       <MonitorUp className="h-3 w-3" />
                       Трансляция
@@ -617,7 +721,7 @@ export function ClientSessionView() {
               <CardContent className="p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Статус</span>
-                  {isSharing ? (
+                  {controlActive ? (
                     <Badge variant="outline" className="text-[10px] text-red-400 border-red-500/20 bg-red-500/10">
                       <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
                       Трансляция
@@ -650,7 +754,7 @@ export function ClientSessionView() {
             </Card>
 
             {/* Screen share status */}
-            {isSharing && (
+            {controlActive && (
               <Card className="border-border bg-red-500/5">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -664,7 +768,7 @@ export function ClientSessionView() {
                     variant="outline"
                     size="sm"
                     className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                    onClick={stopSharing}
+                    onClick={handleStopControl}
                   >
                     <MonitorX className="mr-2 h-3.5 w-3.5" />
                     Остановить трансляцию
@@ -698,7 +802,7 @@ export function ClientSessionView() {
 
           {/* Notice */}
           <div className="mt-auto border-t border-border p-4">
-            {isSharing ? (
+            {controlActive ? (
               <div className="rounded-lg bg-red-500/5 border border-red-500/10 p-3">
                 <div className="flex items-start gap-2">
                   <MonitorUp className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
@@ -843,10 +947,10 @@ export function ClientSessionView() {
               <MonitorUp className="h-6 w-6 text-emerald-400" />
             </div>
             <DialogTitle className="text-center text-foreground">
-              Запрос доступа к экрану
+              Запрос удалённого управления
             </DialogTitle>
             <DialogDescription className="text-center text-muted-foreground">
-              Специалист {session.specialistName} запрашивает доступ к вашему экрану
+              Специалист {session.specialistName} запрашивает управление вашим экраном
             </DialogDescription>
           </DialogHeader>
           <div className="mt-2 text-center">
@@ -857,9 +961,9 @@ export function ClientSessionView() {
               </span>
             </div>
           </div>
-          {shareError && (
+          {controlError && (
             <div className="mx-auto max-w-sm rounded-lg bg-red-500/10 border border-red-500/20 p-2 text-center">
-              <p className="text-xs text-red-400">{shareError}</p>
+              <p className="text-xs text-red-400">{controlError}</p>
             </div>
           )}
           <div className="flex gap-3 mt-4">

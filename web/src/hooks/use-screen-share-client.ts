@@ -9,11 +9,12 @@ import type { Socket } from 'socket.io-client'
  * Usage:
  *   const [socket, setSocket] = useState<Socket | null>(null)
  *   // setSocket when connected...
- *   const { startSharing, stopSharing, isSharing, error } = useScreenShareClient(socket, sessionId)
+ *   const { startSharing, stopSharing, isSharing, error } = useScreenShareClient(socket, sessionId, userId)
  */
 export function useScreenShareClient(
   socket: Socket | null,
   sessionId: string | null,
+  userId?: string,
 ) {
   const [isSharing, setIsSharing] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
@@ -40,11 +41,11 @@ export function useScreenShareClient(
   useEffect(() => {
     return () => {
       if (socket && sessionId) {
-        socket.emit('screen-share-stopped', { sessionId })
+        socket.emit('screen-share-stopped', { sessionId, userId })
       }
       cleanup()
     }
-  }, [sessionId, socket, cleanup])
+  }, [sessionId, socket, userId, cleanup])
 
   // Listen for stop from specialist side
   useEffect(() => {
@@ -79,7 +80,7 @@ export function useScreenShareClient(
 
       // Handle user stopping share via browser UI
       stream.getVideoTracks()[0].addEventListener('ended', () => {
-        socket.emit('screen-share-stopped', { sessionId })
+        socket.emit('screen-share-stopped', { sessionId, userId })
         cleanup()
       })
 
@@ -109,6 +110,7 @@ export function useScreenShareClient(
       socket.emit('screen-share-offer', {
         sessionId,
         sdp: pc.localDescription,
+        userId,
       })
 
       // 5. Listen for answer
@@ -124,6 +126,7 @@ export function useScreenShareClient(
           socket.emit('screen-share-ice-candidate', {
             sessionId,
             candidate: event.candidate.toJSON(),
+            userId,
           })
         }
       }
@@ -154,14 +157,14 @@ export function useScreenShareClient(
       setIsConnecting(false)
       cleanup()
     }
-  }, [socket, sessionId, cleanup])
+  }, [socket, sessionId, userId, cleanup])
 
   const stopSharing = useCallback(() => {
     if (socket && sessionId) {
-      socket.emit('screen-share-stopped', { sessionId })
+      socket.emit('screen-share-stopped', { sessionId, userId })
     }
     cleanup()
-  }, [socket, sessionId, cleanup])
+  }, [socket, sessionId, userId, cleanup])
 
   return {
     startSharing,

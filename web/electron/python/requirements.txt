@@ -1,0 +1,9 @@
+# Python-зависимости для удалённого управления экраном
+# Установка: pip install -r requirements.txt
+
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+pyautogui>=0.9.54
+keyboard>=0.13.5
+pyperclip>=1.8.2

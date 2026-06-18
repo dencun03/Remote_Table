@@ -21,6 +21,7 @@ import {
   MessageSquare,
   Maximize2,
   Minimize2,
+  MonitorX,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -34,7 +35,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { useRemotableStore } from '@/lib/store'
-import { useScreenShareSpecialist } from '@/hooks/use-screen-share-specialist'
+import { useRemoteControl } from '@/hooks/use-remote-control'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -66,8 +67,7 @@ function formatDuration(seconds: number): string {
 }
 
 function formatTime(timestamp: number): string {
-  const d = new Date(timestamp)
-  return d.toLocaleTimeString('ru-RU', {
+  return new Date(timestamp).toLocaleTimeString('ru-RU', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -75,8 +75,7 @@ function formatTime(timestamp: number): string {
 }
 
 function formatChatTime(dateStr: string): string {
-  const d = new Date(dateStr)
-  return d.toLocaleTimeString('ru-RU', {
+  return new Date(dateStr).toLocaleTimeString('ru-RU', {
     hour: '2-digit',
     minute: '2-digit',
   })
@@ -89,7 +88,6 @@ type SideTab = 'log' | 'chat'
 export function SessionView() {
   const [duration, setDuration] = useState(0)
   const [sidePanelOpen, setSidePanelOpen] = useState(true)
-  const [connectionQuality, setConnectionQuality] = useState<'good' | 'medium' | 'poor' | 'none'>('none')
   const [controlRequested, setControlRequested] = useState(false)
   const [showPermission, setShowPermission] = useState(false)
   const [countdown, setCountdown] = useState(30)
@@ -110,8 +108,9 @@ export function SessionView() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLInputElement>(null)
   const socketRef = useRef<Socket | null>(null)
-  const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const streamImgRef = useRef<HTMLImageElement>(null)
   const fullscreenContainerRef = useRef<HTMLDivElement>(null)
+  const isDraggingRef = useRef(false)
 
   const currentUser = useRemotableStore((s) => s.currentUser)
   const currentSession = useRemotableStore((s) => s.currentSession)
@@ -131,28 +130,20 @@ export function SessionView() {
     ])
   }, [])
 
-  // ── WebRTC screen share (specialist — viewer) ──
-  const { isViewing, connectionState: webrtcState, error: webrtcError } = useScreenShareSpecialist(
-    socket,
-    sessionId ?? null,
-    remoteVideoRef,
-    {
-      onConnected: () => addLogEntry('Трансляция экрана подключена'),
-      onDisconnected: () => addLogEntry('Трансляция экрана отключена'),
-    },
-  )
-
-  // ── Log WebRTC events (handled via socket events, not webrtcState) ──
-
-  // ── Simulated connection quality (fallback if WebRTC not connected) ──
-  useEffect(() => {
-    if (!hasSession || isViewing) return
-    const timer = setTimeout(() => {
-      setConnectionQuality('good')
-      addLogEntry('Соединение установлено')
-    }, 2000)
-    return () => clearTimeout(timer)
-  }, [hasSession, isViewing, addLogEntry])
+  // ── Remote control (Python server_1.py + MJPEG) ──
+  const {
+    isActive: controlActive,
+    isStarting: controlStarting,
+    clientConnected,
+    error: controlError,
+    streamUrl,
+    resolution: clientResolution,
+    startControl,
+    stopControl,
+    sendMouseCommand,
+    sendKeyCommand,
+    getLocalIP,
+  } = useRemoteControl()
 
   // ── Session duration timer ──
   useEffect(() => {
@@ -173,41 +164,12 @@ export function SessionView() {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [log])
 
-  // ── Poll session status — detect if the other side ended it ──
-  const sessionEndedByOtherRef = useRef(false)
-  useEffect(() => {
-    if (!currentSession?.id) return
-    let cancelled = false
-    const interval = setInterval(async () => {
-      if (cancelled || sessionEndedByOtherRef.current) return
-      try {
-        const res = await fetch(`/api/sessions/active?userId=${currentUser?.id}`)
-        if (cancelled) return
-        const data = await res.json()
-        if (cancelled) return
-        const stillActive = data.success && data.sessions?.length > 0
-          && data.sessions.some((s: Record<string, unknown>) => String(s.id) === String(currentSession.id))
-        if (!stillActive) {
-          sessionEndedByOtherRef.current = true
-          addNotification({
-            type: 'warning',
-            title: 'Сессия завершена',
-            message: 'Сессия была завершена другой стороной',
-          })
-          endSession()
-          setCurrentView('specialist-dashboard')
-        }
-      } catch { /* silent */ }
-    }, 5_000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [currentSession?.id, currentUser?.id, addNotification, endSession, setCurrentView])
-
   // ── Auto-scroll chat ──
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // ── Socket.IO chat connection + WebRTC signaling ──
+  // ── Socket.IO chat connection ──
   useEffect(() => {
     if (!ticketId || !currentUser) return
 
@@ -226,7 +188,6 @@ export function SessionView() {
         userId: currentUser.id,
         username: currentUser.username,
       })
-      // Join session room for WebRTC signaling
       if (sessionId) {
         socketIo.emit('join-session', {
           sessionId,
@@ -266,27 +227,26 @@ export function SessionView() {
       })
     })
 
-    // WebRTC: client started sharing
-    socketIo.on('screen-share-offer', () => {
-      addLogEntry('Получен запрос трансляции экрана...')
-    })
-
-    // WebRTC: client stopped sharing
-    socketIo.on('screen-share-stopped', () => {
-      addLogEntry('Трансляция экрана остановлена клиентом')
-      setConnectionQuality('good')
-    })
-
-    // Screen share request response from client
-    socketIo.on('screen-share-response', (data: { accepted: boolean }) => {
+    // Клиент ответил на запрос управления
+    socketIo.on('control-response', (data: { sessionId: string; accepted: boolean }) => {
       if (countdownRef.current) clearInterval(countdownRef.current)
       setShowPermission(false)
+      setControlRequested(false)
+
       if (data.accepted) {
-        setControlRequested(false)
-        addLogEntry('Клиент разрешил доступ к экрану')
+        addLogEntry('Клиент разрешил удалённое управление')
+        addNotification({
+          type: 'success',
+          title: 'Управление разрешено',
+          message: 'Клиент предоставил доступ к экрану',
+        })
       } else {
-        setControlRequested(false)
-        addLogEntry('Клиент отклонил запрос доступа к экрану')
+        addLogEntry('Клиент отклонил управление')
+        addNotification({
+          type: 'warning',
+          title: 'Управление отклонено',
+          message: 'Клиент отклонил запрос на управление',
+        })
       }
     })
 
@@ -333,10 +293,9 @@ export function SessionView() {
     return () => { cancelled = true }
   }, [ticketId, currentUser])
 
-  // ── Polling fallback when socket is not connected ──
+  // ── Polling fallback for chat ──
   useEffect(() => {
     if (!ticketId || chatConnected) return
-
     let cancelled = false
     const interval = setInterval(async () => {
       if (cancelled) return
@@ -364,32 +323,22 @@ export function SessionView() {
         }
       } catch { /* silent */ }
     }, 10_000)
-
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
+    return () => { cancelled = true; clearInterval(interval) }
   }, [ticketId, chatConnected, currentUser])
 
   // ── Send message ──
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !currentUser || !ticketId || sending) return
-
     const text = newMessage.trim()
     setNewMessage('')
     setSending(true)
-
     try {
       const res = await fetch(`/api/tickets/${ticketId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          senderId: currentUser.id,
-          text,
-        }),
+        body: JSON.stringify({ senderId: currentUser.id, text }),
       })
       const data = await res.json()
-
       if (data.success && data.message) {
         const savedMsg: ChatMessage = {
           id: String(data.message.id),
@@ -400,12 +349,10 @@ export function SessionView() {
           createdAt: String(data.message.sentAt),
           isOwn: true,
         }
-
         setMessages((prev) => {
           if (prev.some((m) => m.id === savedMsg.id)) return prev
           return [...prev, savedMsg]
         })
-
         if (socketRef.current?.connected) {
           socketRef.current.emit('chat-message', {
             ticketId,
@@ -434,8 +381,63 @@ export function SessionView() {
     }
   }
 
+  // ── Request control: запуск server_1.py + уведомление клиента ──
+  const handleRequestControl = async () => {
+    if (!socketRef.current?.connected || !sessionId) return
+
+    setControlRequested(true)
+    setShowPermission(true)
+    setCountdown(30)
+    addLogEntry('Запрос удалённого управления отправлен клиенту...')
+
+    // Запускаем server_1.py
+    const started = await startControl()
+    if (!started) {
+      setShowPermission(false)
+      setControlRequested(false)
+      return
+    }
+
+    // Получаем локальный IP и отправляем клиенту
+    const localIP = await getLocalIP()
+    addLogEntry(`Сервер управления запущен. IP для клиента: ${localIP}`)
+
+    socketRef.current.emit('control-request', {
+      sessionId,
+      specialistIP: localIP,
+      specialistName: currentUser?.username,
+    })
+
+    // Таймаут автоотмены
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (countdownRef.current) clearInterval(countdownRef.current)
+          setShowPermission(false)
+          setControlRequested(false)
+          addLogEntry('Запрос отклонён по таймауту')
+          stopControl()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+  }
+
+  // ── Stop control ──
+  const handleStopControl = async () => {
+    await stopControl()
+    addLogEntry('Удалённое управление остановлено')
+    if (socketRef.current?.connected && sessionId) {
+      socketRef.current.emit('control-stopped', { sessionId })
+    }
+  }
+
   // ── End session ──
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
+    if (controlActive) {
+      await handleStopControl()
+    }
     if (currentSession?.id) {
       fetch(`/api/sessions/${currentSession.id}`, {
         method: 'PATCH',
@@ -454,37 +456,6 @@ export function SessionView() {
       title: 'Сессия завершена',
       message: `Сессия завершена. Длительность: ${formatDuration(duration)}`,
     })
-  }
-
-  const handleRequestControl = () => {
-    if (!socketRef.current?.connected || !sessionId) return
-
-    setControlRequested(true)
-    setShowPermission(true)
-    setCountdown(30)
-    addLogEntry('Запрос доступа к экрану отправлен')
-
-    socketRef.current.emit('request-screen-share', {
-      sessionId,
-      userId: currentUser?.id,
-      username: currentUser?.username,
-    })
-
-    countdownRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current)
-          if (socketRef.current?.connected) {
-            socketRef.current.emit('cancel-screen-share-request', { sessionId })
-          }
-          setShowPermission(false)
-          setControlRequested(false)
-          addLogEntry('Запрос отклонён по таймауту')
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
   }
 
   const handleGoToTickets = () => {
@@ -508,6 +479,48 @@ export function SessionView() {
     return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
 
+  // ── Mouse handling on stream image ──
+  const getRelativeCoords = (e: React.MouseEvent<HTMLImageElement>) => {
+    const img = e.currentTarget
+    const rect = img.getBoundingClientRect()
+    // Координаты в масштабе кадра (1280x720)
+    const x = ((e.clientX - rect.left) / rect.width) * 1280
+    const y = ((e.clientY - rect.top) / rect.height) * 720
+    return { x: Math.round(x), y: Math.round(y) }
+  }
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLImageElement>) => {
+    if (!clientConnected) return
+    const { x, y } = getRelativeCoords(e)
+    if (e.button === 0) {
+      // Левый клик
+      sendMouseCommand({ x, y, click: 'left' })
+      isDraggingRef.current = true
+    } else if (e.button === 2) {
+      // Правый клик
+      sendMouseCommand({ x, y, click: 'right' })
+    }
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLImageElement>) => {
+    if (!clientConnected || !isDraggingRef.current) return
+    const { x, y } = getRelativeCoords(e)
+    sendMouseCommand({ x, y, drag: true })
+  }
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLImageElement>) => {
+    if (!clientConnected) return
+    if (isDraggingRef.current) {
+      const { x, y } = getRelativeCoords(e)
+      sendMouseCommand({ x, y, drag: false })
+      isDraggingRef.current = false
+    }
+  }
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+  }
+
   // ── Нет активной сессии ──
   if (!hasSession) {
     return (
@@ -525,7 +538,6 @@ export function SessionView() {
             К заявкам
           </button>
         </div>
-
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
@@ -533,8 +545,7 @@ export function SessionView() {
             </div>
             <h2 className="text-lg font-medium text-muted-foreground">Нет активного сеанса</h2>
             <p className="mt-2 max-w-sm text-sm text-muted-foreground/40">
-              Примите заявку и нажмите «Начать сеанс» в детали заявки,
-              чтобы запустить удалённый доступ к рабочему столу пользователя.
+              Примите заявку и нажмите «Начать сеанс» в детали заявки.
             </p>
             <Button
               onClick={handleGoToTickets}
@@ -555,15 +566,6 @@ export function SessionView() {
     ? `Клиент #${currentSession.clientUserId}`
     : currentUser?.username ?? 'Клиент'
 
-  const qualityConfig = {
-    good: { icon: Wifi, label: 'Хорошее', color: 'text-emerald-400' },
-    medium: { icon: Wifi, label: 'Среднее', color: 'text-yellow-400' },
-    poor: { icon: Wifi, label: 'Плохое', color: 'text-orange-400' },
-    none: { icon: WifiOff, label: 'Нет', color: 'text-red-400' },
-  }
-  const quality = qualityConfig[connectionQuality]
-  const QualityIcon = quality.icon
-
   return (
     <div ref={fullscreenContainerRef} className="relative flex h-[calc(100vh-5rem)] flex-col overflow-hidden">
       {/* Верхняя панель */}
@@ -579,10 +581,28 @@ export function SessionView() {
               {formatDuration(duration)}
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <QualityIcon className={`h-3.5 w-3.5 ${quality.color}`} />
-            <span className={`text-xs ${quality.color}`}>{quality.label}</span>
-          </div>
+          {controlActive && (
+            <Badge
+              variant="outline"
+              className={`text-[10px] ${
+                clientConnected
+                  ? 'border-emerald-500/30 text-emerald-400'
+                  : 'border-yellow-500/30 text-yellow-400'
+              }`}
+            >
+              {clientConnected ? (
+                <>
+                  <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Управление активно
+                </>
+              ) : (
+                <>
+                  <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                  Ожидание клиента...
+                </>
+              )}
+            </Badge>
+          )}
           <div className="flex items-center gap-1.5">
             {chatConnected ? (
               <span className="flex items-center gap-1 text-[10px] text-emerald-500">
@@ -594,25 +614,15 @@ export function SessionView() {
               </span>
             )}
           </div>
-          {isViewing && (
-            <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">
-              <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Трансляция
-            </Badge>
-          )}
         </div>
         <div className="flex items-center gap-2">
-          {isViewing && (
+          {controlActive && clientConnected && (
             <button
               onClick={toggleFullscreen}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title={isFullscreen ? 'Выйти из полноэкранного режима' : 'Полноэкранный режим'}
             >
-              {isFullscreen ? (
-                <Minimize2 className="h-4 w-4" />
-              ) : (
-                <Maximize2 className="h-4 w-4" />
-              )}
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
           )}
           <button
@@ -620,11 +630,7 @@ export function SessionView() {
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             title={sidePanelOpen ? 'Скрыть панель' : 'Показать панель'}
           >
-            {sidePanelOpen ? (
-              <PanelRightClose className="h-4 w-4" />
-            ) : (
-              <PanelRightOpen className="h-4 w-4" />
-            )}
+            {sidePanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
           </button>
         </div>
       </div>
@@ -633,33 +639,44 @@ export function SessionView() {
       <div className="flex flex-1 overflow-hidden">
         {/* Удалённый рабочий стол */}
         <div className="relative flex flex-1 items-center justify-center bg-black p-0 overflow-hidden">
-          {isViewing ? (
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="h-full w-full object-contain"
-            />
-          ) : webrtcState === 'connecting' ? (
+          {controlActive && streamUrl ? (
+            clientConnected ? (
+              <img
+                ref={streamImgRef}
+                src={streamUrl}
+                alt="Удалённый экран"
+                className="h-full w-full object-contain cursor-crosshair select-none"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onContextMenu={handleContextMenu}
+                draggable={false}
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-10 w-10 animate-spin text-emerald-400" />
+                <p className="text-sm text-muted-foreground">
+                  Ожидание подключения клиента...
+                </p>
+                <p className="text-xs text-muted-foreground/60">
+                  Сервер управления запущен. Клиент должен разрешить доступ.
+                </p>
+              </div>
+            )
+          ) : controlError ? (
             <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-10 w-10 animate-spin text-emerald-400" />
-              <p className="text-sm text-muted-foreground">Подключение к экрану клиента...</p>
-            </div>
-          ) : webrtcError ? (
-            <div className="flex flex-col items-center gap-3">
-              <WifiOff className="h-10 w-10 text-red-400/60" />
-              <p className="text-sm text-red-400">{webrtcError}</p>
-              <p className="text-xs text-muted-foreground/60">Убедитесь, что клиент начал трансляцию экрана</p>
+              <MonitorX className="h-10 w-10 text-red-400/60" />
+              <p className="text-sm text-red-400">{controlError}</p>
             </div>
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center">
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted/30 mb-4">
                 <Monitor className="h-10 w-10 text-muted-foreground/30" />
               </div>
-              <p className="text-lg text-muted-foreground/60">Ожидание трансляции экрана</p>
+              <p className="text-lg text-muted-foreground/60">Управление не запущено</p>
               <p className="mt-2 max-w-sm text-sm text-muted-foreground/40">
-                Когда клиент нажмёт «Поделиться экраном», его рабочий стол появится здесь.
+                Нажмите «Запросить управление» в боковой панели,
+                чтобы подключиться к экрану клиента.
               </p>
             </div>
           )}
@@ -682,10 +699,7 @@ export function SessionView() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">{clientName}</p>
-                    <Badge
-                      variant="outline"
-                      className="mt-0.5 text-[10px] text-emerald-400"
-                    >
+                    <Badge variant="outline" className="mt-0.5 text-[10px] text-emerald-400">
                       Пользователь
                     </Badge>
                   </div>
@@ -695,23 +709,25 @@ export function SessionView() {
 
             {/* Screen share status */}
             <div className="px-3 pb-2">
-              <Card className={`border-border ${isViewing ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-muted/50'}`}>
+              <Card className={`border-border ${controlActive && clientConnected ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-muted/50'}`}>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
-                    <Monitor className={`h-4 w-4 ${isViewing ? 'text-emerald-400' : 'text-muted-foreground/60'}`} />
+                    <Monitor className={`h-4 w-4 ${controlActive && clientConnected ? 'text-emerald-400' : 'text-muted-foreground/60'}`} />
                     <span className="text-xs text-foreground/80">
-                      {isViewing ? 'Экран клиента' : 'Ожидание экрана'}
+                      {controlActive
+                        ? clientConnected
+                          ? 'Экран клиента'
+                          : 'Ожидание клиента'
+                        : 'Управление остановлено'}
                     </span>
                   </div>
-                  {isViewing && (
+                  {controlActive && clientConnected && clientResolution && (
                     <p className="mt-1.5 text-[10px] text-emerald-400/80">
-                      Трансляция экрана активна
+                      {clientResolution.width}×{clientResolution.height}
                     </p>
                   )}
-                  {!isViewing && webrtcState !== 'connecting' && (
-                    <p className="mt-1.5 text-[10px] text-muted-foreground/50">
-                      Ожидание от клиента
-                    </p>
+                  {controlError && (
+                    <p className="mt-1.5 text-[10px] text-red-400">{controlError}</p>
                   )}
                 </CardContent>
               </Card>
@@ -727,19 +743,30 @@ export function SessionView() {
                 <PhoneOff className="mr-2 h-4 w-4" />
                 Завершить сессию
               </Button>
-              <Button
-                variant={controlRequested ? 'default' : 'outline'}
-                className={`w-full justify-start ${
-                  controlRequested
-                    ? 'bg-yellow-600 text-white hover:bg-yellow-700'
-                    : 'border-input text-foreground/80 hover:bg-accent hover:text-foreground'
-                }`}
-                onClick={handleRequestControl}
-                disabled={controlRequested}
-              >
-                <MousePointer2 className="mr-2 h-4 w-4" />
-                {controlRequested ? 'Запрос отправлен' : 'Запрос управления'}
-              </Button>
+              {!controlActive ? (
+                <Button
+                  variant="outline"
+                  className="w-full justify-start border-input text-foreground/80 hover:bg-accent hover:text-foreground"
+                  onClick={handleRequestControl}
+                  disabled={controlStarting || controlRequested}
+                >
+                  {controlStarting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <MousePointer2 className="mr-2 h-4 w-4" />
+                  )}
+                  {controlStarting ? 'Запуск...' : controlRequested ? 'Запрос отправлен' : 'Запросить управление'}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full justify-start border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10 hover:text-yellow-300"
+                  onClick={handleStopControl}
+                >
+                  <MonitorX className="mr-2 h-4 w-4" />
+                  Остановить управление
+                </Button>
+              )}
             </div>
 
             {/* Вкладки: Журнал / Чат */}
@@ -770,7 +797,7 @@ export function SessionView() {
 
             {/* Журнал */}
             {sideTab === 'log' && (
-              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-96">
                 {log.length === 0 ? (
                   <div className="flex items-center justify-center py-8 text-muted-foreground/40">
                     <span className="text-xs">Нет записей</span>
@@ -795,15 +822,11 @@ export function SessionView() {
             {/* Чат */}
             {sideTab === 'chat' && (
               <div className="flex flex-1 flex-col overflow-hidden">
-                {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-3">
                   {messages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/40">
                       <MessageSquare className="mb-2 h-6 w-6" />
                       <p className="text-xs">Пока нет сообщений</p>
-                      <p className="mt-0.5 text-[10px] text-foreground/40">
-                        Напишите сообщение клиенту
-                      </p>
                     </div>
                   ) : (
                     messages.map((msg) => {
@@ -813,7 +836,6 @@ export function SessionView() {
                           key={msg.id}
                           className={`flex gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}
                         >
-                          {/* Avatar */}
                           <div
                             className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
                               isOwn
@@ -828,8 +850,6 @@ export function SessionView() {
                               .toUpperCase()
                               .slice(0, 2)}
                           </div>
-
-                          {/* Bubble */}
                           <div className={`max-w-[85%] ${isOwn ? 'items-end' : 'items-start'}`}>
                             <div className="flex items-center gap-1.5 mb-0.5">
                               <span className="text-[10px] text-muted-foreground/70">
@@ -855,8 +875,6 @@ export function SessionView() {
                   )}
                   <div ref={messagesEndRef} />
                 </div>
-
-                {/* Input */}
                 <div className="shrink-0 border-t border-border p-2">
                   <div className="flex items-center gap-1.5">
                     <Input
@@ -874,11 +892,7 @@ export function SessionView() {
                       size="icon"
                       className="h-8 w-8 shrink-0 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40"
                     >
-                      {sending ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Send className="h-3.5 w-3.5" />
-                      )}
+                      {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                     </Button>
                   </div>
                 </div>
@@ -888,15 +902,16 @@ export function SessionView() {
         )}
       </div>
 
-      {/* Диалог запроса доступа к экрану */}
+      {/* Диалог ожидания ответа клиента */}
       <Dialog open={showPermission} onOpenChange={(open) => {
         if (!open) {
           if (countdownRef.current) clearInterval(countdownRef.current)
           if (socketRef.current?.connected && sessionId) {
-            socketRef.current.emit('cancel-screen-share-request', { sessionId })
+            socketRef.current.emit('control-cancel', { sessionId })
           }
           setShowPermission(false)
           setControlRequested(false)
+          stopControl()
         }
       }}>
         <DialogContent className="border-border bg-card sm:max-w-md">
@@ -905,10 +920,10 @@ export function SessionView() {
               <Monitor className="h-6 w-6 text-emerald-400" />
             </div>
             <DialogTitle className="text-center text-foreground">
-              Запрос доступа к экрану
+              Запрос удалённого управления
             </DialogTitle>
             <DialogDescription className="text-center text-muted-foreground">
-              Ожидание ответа от клиента
+              Ожидание ответа от клиента...
             </DialogDescription>
           </DialogHeader>
           <div className="mt-2 text-center">
@@ -924,10 +939,11 @@ export function SessionView() {
               onClick={() => {
                 if (countdownRef.current) clearInterval(countdownRef.current)
                 if (socketRef.current?.connected && sessionId) {
-                  socketRef.current.emit('cancel-screen-share-request', { sessionId })
+                  socketRef.current.emit('control-cancel', { sessionId })
                 }
                 setShowPermission(false)
                 setControlRequested(false)
+                stopControl()
                 addLogEntry('Запрос отменён')
               }}
               variant="outline"

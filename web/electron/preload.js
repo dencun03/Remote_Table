@@ -29,6 +29,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Системные утилиты ──
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', { url }),
 
+  // ── Удалённое управление экраном (Python server_1.py / client_1.py) ──
+  control: {
+    startServer: () => ipcRenderer.invoke('control:startServer'),
+    stopServer: () => ipcRenderer.invoke('control:stopServer'),
+    startClient: (host, port) => ipcRenderer.invoke('control:startClient', { host, port }),
+    stopClient: () => ipcRenderer.invoke('control:stopClient'),
+    getLocalIP: () => ipcRenderer.invoke('control:getLocalIP'),
+    isRunning: (name) => ipcRenderer.invoke('control:isRunning', { name }),
+  },
+
   // ── Слушатели событий от main-процесса ──
   onPythonOutput: (callback) =>
     ipcRenderer.on('python:output', (_event, data) => callback(data)),
