@@ -57,20 +57,20 @@ export function LoginView() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0f1a] p-4">
-      <Card className="w-full max-w-sm border-slate-800 bg-slate-900">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-sm border-border bg-card">
         <CardHeader className="flex flex-col items-center gap-2 pb-4 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
-            <Monitor className="h-6 w-6 text-emerald-400" />
+            <Monitor className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Remotable</h1>
-          <p className="text-sm text-slate-400">Удалённая техническая поддержка</p>
+          <h1 className="text-2xl font-bold text-foreground">Remotable</h1>
+          <p className="text-sm text-muted-foreground">Удалённая техническая поддержка</p>
         </CardHeader>
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-slate-300">
+              <Label htmlFor="username" className="text-foreground/80">
                 Имя пользователя
               </Label>
               <Input
@@ -80,12 +80,12 @@ export function LoginView() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 focus-visible:ring-emerald-500"
+                className="focus-visible:ring-emerald-500"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-slate-300">
+              <Label htmlFor="password" className="text-foreground/80">
                 Пароль
               </Label>
               <Input
@@ -95,7 +95,7 @@ export function LoginView() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 focus-visible:ring-emerald-500"
+                className="focus-visible:ring-emerald-500"
               />
             </div>
 
@@ -119,10 +119,10 @@ export function LoginView() {
         <CardFooter className="justify-center pb-6">
           <button
             onClick={() => setCurrentView('register')}
-            className="text-sm text-slate-400 transition-colors hover:text-emerald-400"
+            className="text-sm text-muted-foreground transition-colors hover:text-emerald-600 dark:hover:text-emerald-400"
           >
             Нет аккаунта?{' '}
-            <span className="font-medium text-emerald-400 hover:underline">
+            <span className="font-medium text-emerald-600 dark:text-emerald-400 hover:underline">
               Зарегистрироваться
             </span>
           </button>

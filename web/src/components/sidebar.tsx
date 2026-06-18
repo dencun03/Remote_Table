@@ -115,7 +115,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`flex h-full flex-col border-r border-slate-800 bg-[#0d1117] transition-all duration-300 ease-in-out ${
+      className={`flex h-full flex-col border-r bg-sidebar transition-all duration-300 ease-in-out ${
         sidebarOpen ? 'w-64' : 'w-16'
       }`}
     >
@@ -123,7 +123,7 @@ export function Sidebar() {
       <div className="flex h-10 items-center justify-end px-3">
         <button
           onClick={toggleSidebar}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <ChevronLeft
             className={`h-4 w-4 transition-transform duration-300 ${
@@ -149,13 +149,13 @@ export function Sidebar() {
               onClick={() => setCurrentView(targetView)}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                 isActive
-                  ? 'bg-emerald-500/10 text-emerald-400'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
               } ${!sidebarOpen ? 'justify-center' : ''}`}
             >
               <Icon
                 className={`h-5 w-5 shrink-0 ${
-                  isActive ? 'text-emerald-400' : ''
+                  isActive ? 'text-emerald-600 dark:text-emerald-400' : ''
                 }`}
               />
               {sidebarOpen && <span className="truncate">{item.label}</span>}
@@ -165,17 +165,17 @@ export function Sidebar() {
       </nav>
 
       {/* User section */}
-      <div className="border-t border-slate-800 p-3">
+      <div className="border-t p-3">
         <div className={`flex items-center gap-3 ${!sidebarOpen ? 'justify-center' : ''}`}>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-600 dark:text-emerald-400">
             {currentUser ? getInitials(currentUser.username) : '??'}
           </div>
           {sidebarOpen && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-200">
+              <p className="truncate text-sm font-medium text-foreground">
                 {currentUser?.username ?? 'Гость'}
               </p>
-              <span className="inline-block rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
+              <span className="inline-block rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
                 {roleLabels[userRole] ?? userRole}
               </span>
             </div>
@@ -183,7 +183,7 @@ export function Sidebar() {
           {sidebarOpen && (
             <button
               onClick={logout}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-800 hover:text-red-400"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-red-500"
               title="Выйти"
             >
               <LogOut className="h-4 w-4" />

@@ -197,16 +197,7 @@ export const useRemotableStore = create<RemotableStore>((set) => ({
 
   setSession: (session) => set({ currentSession: session }),
 
-  endSession: () =>
-    set((state) => ({
-      currentSession: state.currentSession
-        ? {
-            ...state.currentSession,
-            status: 'ended' as SessionStatus,
-            endedAt: new Date().toISOString(),
-          }
-        : null,
-    })),
+  endSession: () => set({ currentSession: null }),
 
   // ── Notifications ──
   notifications: [],

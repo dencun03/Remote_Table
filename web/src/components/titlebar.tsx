@@ -46,21 +46,21 @@ export function Titlebar() {
 
   return (
     <div
-      className="no-drag-mixin flex h-10 select-none items-center justify-between bg-[#0a0f1a] px-4"
+      className="no-drag-mixin flex h-10 select-none items-center justify-between bg-background px-4"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
       {/* Left: App name */}
       <div className="flex items-center gap-2">
         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/20">
-          <Monitor className="h-3.5 w-3.5 text-emerald-400" />
+          <Monitor className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
         </div>
-        <span className="text-sm font-semibold text-white">Remotable</span>
+        <span className="text-sm font-semibold text-foreground">Remotable</span>
       </div>
 
       {/* Center: Connection status */}
       <div className="flex items-center gap-1.5">
         <span className={`inline-block h-2 w-2 rounded-full ${config.dotClass}`} />
-        <span className="text-xs text-slate-300">{config.label}</span>
+        <span className="text-xs text-muted-foreground">{config.label}</span>
       </div>
 
       {/* Right: Window controls */}
@@ -70,19 +70,19 @@ export function Titlebar() {
       >
         <button
           onClick={handleMinimize}
-          className="no-drag flex h-10 w-10 items-center justify-center text-slate-400 transition-colors hover:bg-gray-700 hover:text-white"
+          className="no-drag flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <Minus className="h-4 w-4" />
         </button>
         <button
           onClick={handleMaximize}
-          className="no-drag flex h-10 w-10 items-center justify-center text-slate-400 transition-colors hover:bg-gray-700 hover:text-white"
+          className="no-drag flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <Square className="h-3.5 w-3.5" />
         </button>
         <button
           onClick={handleClose}
-          className="no-drag flex h-10 w-10 items-center justify-center text-slate-400 transition-colors hover:bg-[#ef4444] hover:text-white"
+          className="no-drag flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-red-500 hover:text-white"
         >
           <X className="h-4 w-4" />
         </button>

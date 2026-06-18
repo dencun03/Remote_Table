@@ -30,7 +30,7 @@ export function ConnectionStatusBadge() {
       <span
         className={`inline-block h-2 w-2 rounded-full ${config.dotClass}`}
       />
-      <span className="text-slate-300">{config.label}</span>
+      <span className="text-foreground/80">{config.label}</span>
     </span>
   )
 }

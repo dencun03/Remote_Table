@@ -88,14 +88,14 @@ export function CreateTicketView() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Card className="border-slate-800 bg-slate-900">
+      <Card className="border-border bg-card">
         <CardHeader className="pb-4">
-          <h2 className="text-lg font-bold text-white">Новая заявка</h2>
+          <h2 className="text-lg font-bold text-foreground">Новая заявка</h2>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="ticket-title" className="text-slate-300">
+              <Label htmlFor="ticket-title" className="text-foreground/80">
                 Заголовок
               </Label>
               <Input
@@ -105,12 +105,12 @@ export function CreateTicketView() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
-                className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 focus-visible:ring-emerald-500"
+                className="focus-visible:ring-emerald-500"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="ticket-desc" className="text-slate-300">
+              <Label htmlFor="ticket-desc" className="text-foreground/80">
                 Описание
               </Label>
               <Textarea
@@ -120,18 +120,18 @@ export function CreateTicketView() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 required
-                className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 focus-visible:ring-emerald-500 resize-none"
+                className="focus-visible:ring-emerald-500 resize-none"
               />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-slate-300">Категория</Label>
+                <Label className="text-foreground/80">Категория</Label>
                 <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                  <SelectTrigger>
                     <SelectValue placeholder="Выберите категорию" />
                   </SelectTrigger>
-                  <SelectContent className="border-slate-700 bg-slate-800">
+                  <SelectContent>
                     {categories.map((cat) => (
                       <SelectItem key={cat.value} value={cat.value}>
                         {cat.label}
@@ -142,12 +142,12 @@ export function CreateTicketView() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-slate-300">Приоритет</Label>
+                <Label className="text-foreground/80">Приоритет</Label>
                 <Select value={priority} onValueChange={setPriority}>
-                  <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-slate-700 bg-slate-800">
+                  <SelectContent>
                     {priorities.map((p) => (
                       <SelectItem key={p.value} value={p.value}>
                         {p.label}
@@ -168,7 +168,7 @@ export function CreateTicketView() {
               <Button
                 type="button"
                 variant="outline"
-                className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+                className="border-input text-foreground/80 hover:bg-accent hover:text-foreground"
                 onClick={() => setCurrentView('client-dashboard')}
               >
                 Отмена

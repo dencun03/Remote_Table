@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Ticket as TicketIcon, Clock, Loader2, AlertCircle } from 'lucide-react'
+import { Plus, Ticket as TicketIcon, Clock, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -90,13 +90,24 @@ export function ClientDashboard() {
   const inProgressCount = tickets.filter((t) => t.status === 'in_progress').length
   const resolvedCount = tickets.filter((t) => t.status === 'resolved').length
 
+  const refreshTickets = () => {
+    setLoading(true)
+    fetch(`/api/tickets?role=user&userId=${currentUser?.id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) setTickets(data.tickets)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
   const handleTicketClick = (ticket: Ticket) => {
     selectTicket(ticket)
     setCurrentView('ticket-detail')
   }
 
   const stats = [
-    { label: 'Всего', value: totalCount, icon: TicketIcon, color: 'text-slate-300' },
+    { label: 'Всего', value: totalCount, icon: TicketIcon, color: 'text-foreground/80' },
     { label: 'Ожидает', value: pendingCount, icon: Clock, color: 'text-yellow-400' },
     { label: 'В работе', value: inProgressCount, icon: AlertCircle, color: 'text-blue-400' },
     { label: 'Решено', value: resolvedCount, icon: TicketIcon, color: 'text-emerald-400' },
@@ -106,15 +117,27 @@ export function ClientDashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Мои заявки</h1>
-        <Button
-          onClick={() => setCurrentView('create-ticket')}
-          className="bg-emerald-600 text-white hover:bg-emerald-700"
-          size="sm"
-        >
-          <Plus className="mr-1.5 h-4 w-4" />
-          Создать заявку
-        </Button>
+        <h1 className="text-xl font-bold text-foreground">Мои заявки</h1>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={refreshTickets}
+            disabled={loading}
+            className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            title="Обновить"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button
+            onClick={() => setCurrentView('create-ticket')}
+            className="bg-emerald-600 text-white hover:bg-emerald-700"
+            size="sm"
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Создать заявку
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -122,14 +145,14 @@ export function ClientDashboard() {
         {stats.map((stat) => {
           const Icon = stat.icon
           return (
-            <Card key={stat.label} className="border-slate-800 bg-slate-900">
+            <Card key={stat.label} className="border-border bg-card">
               <CardContent className="flex items-center gap-3 p-4">
-                <div className="rounded-lg bg-slate-800 p-2">
+                <div className="rounded-lg bg-muted p-2">
                   <Icon className={`h-4 w-4 ${stat.color}`} />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">{stat.value}</p>
-                  <p className="text-xs text-slate-400">{stat.label}</p>
+                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground">{stat.label}</p>
                 </div>
               </CardContent>
             </Card>
@@ -138,15 +161,15 @@ export function ClientDashboard() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 rounded-lg bg-slate-800/50 p-1">
+      <div className="flex gap-1 rounded-lg bg-muted/50 p-1">
         {filterTabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveFilter(tab.key)}
             className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               activeFilter === tab.key
-                ? 'bg-slate-700 text-white'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-accent text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {tab.label}
@@ -160,10 +183,10 @@ export function ClientDashboard() {
           <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
         </div>
       ) : filteredTickets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground/70">
           <TicketIcon className="mb-3 h-12 w-12 opacity-30" />
           <p className="text-sm">У вас пока нет заявок</p>
-          <p className="mt-1 text-xs text-slate-600">
+          <p className="mt-1 text-xs text-muted-foreground/40">
             Нажмите &laquo;Создать заявку&raquo;, чтобы получить помощь
           </p>
         </div>
@@ -175,7 +198,7 @@ export function ClientDashboard() {
             return (
               <Card
                 key={ticket.id}
-                className="cursor-pointer border-slate-800 bg-slate-900 transition-colors hover:border-slate-700"
+                className="cursor-pointer border-border bg-card transition-colors hover:border-input"
                 onClick={() => handleTicketClick(ticket)}
               >
                 <CardContent className="p-4">
@@ -185,14 +208,14 @@ export function ClientDashboard() {
                         <span
                           className={`inline-block h-2 w-2 shrink-0 rounded-full ${priority.dotClass}`}
                         />
-                        <h3 className="truncate text-sm font-medium text-white">
+                        <h3 className="truncate text-sm font-medium text-foreground">
                           {ticket.title}
                         </h3>
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <Badge
                           variant="outline"
-                          className="text-[11px] font-normal text-slate-400"
+                          className="text-[11px] font-normal text-muted-foreground"
                         >
                           {ticket.category}
                         </Badge>
@@ -203,13 +226,13 @@ export function ClientDashboard() {
                           {statusLabels[ticket.status]}
                         </Badge>
                         {ticket.specialist && (
-                          <span className="text-[11px] text-slate-500">
+                          <span className="text-[11px] text-muted-foreground/70">
                             Специалист: {ticket.specialist.username}
                           </span>
                         )}
                       </div>
                     </div>
-                    <span className="shrink-0 text-[11px] text-slate-500">
+                    <span className="shrink-0 text-[11px] text-muted-foreground/70">
                       {formatDate(ticket.createdAt)}
                     </span>
                   </div>

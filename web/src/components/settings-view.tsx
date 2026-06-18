@@ -1,20 +1,19 @@
 'use client'
 
 import { useState } from 'react'
+import { useTheme } from 'next-themes'
 import {
   Save,
-  Wifi,
-  WifiOff,
   CheckCircle,
-  AlertCircle,
   Loader2,
   Info,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -34,36 +33,11 @@ const roleLabels: Record<string, string> = {
 
 export function SettingsView() {
   const currentUser = useRemotableStore((s) => s.currentUser)
-  const connectionStatus = useRemotableStore((s) => s.connectionStatus)
-  const setConnectionStatus = useRemotableStore((s) => s.setConnectionStatus)
+  const { theme, setTheme } = useTheme()
 
-  const [relayHost, setRelayHost] = useState('localhost')
-  const [relayPort, setRelayPort] = useState('3030')
   const [email, setEmail] = useState(currentUser?.email ?? '')
-  const [darkMode, setDarkMode] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<
-    'idle' | 'success' | 'error'
-  >('idle')
   const [saveSuccess, setSaveSuccess] = useState(false)
-
-  const handleTestConnection = async () => {
-    setTesting(true)
-    setTestResult('idle')
-
-    // Simulate connection test
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    setTestResult('success')
-    setConnectionStatus('connected')
-
-    setTimeout(() => {
-      setTestResult('idle')
-    }, 3000)
-
-    setTesting(false)
-  }
 
   const handleSaveProfile = async () => {
     setSaving(true)
@@ -77,103 +51,20 @@ export function SettingsView() {
     setSaving(false)
   }
 
+  const isDark = theme === 'dark'
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-xl font-bold text-white">Настройки</h1>
-
-      {/* Connection section */}
-      <Card className="border-slate-800 bg-slate-900">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base text-white">
-            <Wifi className="h-4 w-4 text-emerald-400" />
-            Подключение
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="relay-host" className="text-slate-300">
-                Хост relay-сервера
-              </Label>
-              <Input
-                id="relay-host"
-                type="text"
-                value={relayHost}
-                onChange={(e) => setRelayHost(e.target.value)}
-                className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 focus-visible:ring-emerald-500"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="relay-port" className="text-slate-300">
-                Порт
-              </Label>
-              <Input
-                id="relay-port"
-                type="text"
-                value={relayPort}
-                onChange={(e) => setRelayPort(e.target.value)}
-                className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 focus-visible:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <Button
-              onClick={handleTestConnection}
-              variant="outline"
-              className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
-              disabled={testing}
-              size="sm"
-            >
-              {testing ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : testResult === 'success' ? (
-                <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
-              ) : testResult === 'error' ? (
-                <AlertCircle className="mr-1.5 h-3.5 w-3.5" />
-              ) : (
-                <Wifi className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              Тест соединения
-            </Button>
-
-            {testResult === 'success' && (
-              <span className="text-sm text-emerald-400">Соединение установлено</span>
-            )}
-            {testResult === 'error' && (
-              <span className="text-sm text-red-400">Ошибка подключения</span>
-            )}
-
-            <div className="ml-auto flex items-center gap-2">
-              {connectionStatus === 'connected' || connectionStatus === 'active' ? (
-                <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                  Подключено
-                </span>
-              ) : connectionStatus === 'connecting' ? (
-                <span className="flex items-center gap-1.5 text-xs text-yellow-400">
-                  <span className="inline-block h-2 w-2 rounded-full bg-yellow-400 animate-pulse" />
-                  Подключение...
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                  <WifiOff className="h-3 w-3" />
-                  Отключено
-                </span>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <h1 className="text-xl font-bold text-foreground">Настройки</h1>
 
       {/* Profile section */}
-      <Card className="border-slate-800 bg-slate-900">
+      <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-white">Профиль</CardTitle>
+          <CardTitle className="text-base text-foreground">Профиль</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="profile-username" className="text-slate-300">
+            <Label htmlFor="profile-username">
               Имя пользователя
             </Label>
             <Input
@@ -182,12 +73,12 @@ export function SettingsView() {
               value={currentUser?.username ?? ''}
               readOnly
               disabled
-              className="border-slate-700 bg-slate-800/50 text-slate-400"
+              className="bg-muted/50 text-muted-foreground"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="profile-email" className="text-slate-300">
+            <Label htmlFor="profile-email">
               Электронная почта
             </Label>
             <Input
@@ -195,16 +86,15 @@ export function SettingsView() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 focus-visible:ring-emerald-500"
             />
           </div>
 
           <div className="space-y-2">
-            <Label className="text-slate-300">Роль</Label>
+            <Label>Роль</Label>
             <div>
               <Badge
                 variant="outline"
-                className="border-emerald-500/20 text-emerald-400"
+                className="border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
               >
                 {roleLabels[currentUser?.role ?? 'user']}
               </Badge>
@@ -226,65 +116,82 @@ export function SettingsView() {
               Сохранить
             </Button>
             {saveSuccess && (
-              <span className="text-sm text-emerald-400">Изменения сохранены</span>
+              <span className="text-sm text-emerald-600 dark:text-emerald-400">Изменения сохранены</span>
             )}
           </div>
         </CardContent>
       </Card>
 
       {/* App section */}
-      <Card className="border-slate-800 bg-slate-900">
+      <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-white">Приложение</CardTitle>
+          <CardTitle className="text-base text-foreground">Приложение</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-slate-300">Тема оформления</Label>
-              <p className="text-xs text-slate-500">
+              <Label>Тема оформления</Label>
+              <p className="text-xs text-muted-foreground">
                 Переключение между светлой и тёмной темой
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400">
-                {darkMode ? 'Тёмная' : 'Светлая'}
+              <span className="text-xs text-muted-foreground">
+                {isDark ? 'Тёмная' : 'Светлая'}
               </span>
-              <Switch
-                checked={darkMode}
-                onCheckedChange={setDarkMode}
-              />
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isDark}
+                onClick={() => setTheme(isDark ? 'light' : 'dark')}
+                className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 bg-muted"
+              >
+                <span
+                  className={`pointer-events-none block h-5 w-5 rounded-full bg-foreground shadow-lg ring-0 transition-transform ${
+                    isDark ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                >
+                  <span className="flex h-full w-full items-center justify-center">
+                    {isDark ? (
+                      <Moon className="h-3 w-3 text-background" />
+                    ) : (
+                      <Sun className="h-3 w-3 text-background" />
+                    )}
+                  </span>
+                </span>
+              </button>
             </div>
           </div>
 
-          <Separator className="bg-slate-800" />
+          <Separator />
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-slate-300">Язык</Label>
-              <p className="text-xs text-slate-500">Язык интерфейса</p>
+              <Label>Язык</Label>
+              <p className="text-xs text-muted-foreground">Язык интерфейса</p>
             </div>
             <Select defaultValue="ru" disabled>
-              <SelectTrigger className="w-36 border-slate-700 bg-slate-800 text-white">
+              <SelectTrigger className="w-36">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="border-slate-700 bg-slate-800">
+              <SelectContent>
                 <SelectItem value="ru">Русский</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <Separator className="bg-slate-800" />
+          <Separator />
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-slate-300">Версия</Label>
-              <p className="text-xs text-slate-500">
+              <Label>Версия</Label>
+              <p className="text-xs text-muted-foreground">
                 Текущая версия приложения
               </p>
             </div>
             <div className="flex items-center gap-1.5">
-              <Info className="h-3.5 w-3.5 text-slate-500" />
-              <span className="text-sm font-mono text-slate-400">v1.0.0</span>
+              <Info className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-sm font-mono text-muted-foreground">v1.0.0</span>
             </div>
           </div>
         </CardContent>

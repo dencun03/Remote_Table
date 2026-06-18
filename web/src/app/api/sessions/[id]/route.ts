@@ -45,6 +45,19 @@ export async function PATCH(
       },
     })
 
+    // Добавить после обновления сессии, перед return:
+
+    // При завершении сессии — ставим заявку в 'resolved'
+    if (status === 'ended' && updatedSession.ticketId) {
+      await db.ticket.update({
+        where: { id: updatedSession.ticketId },
+        data: {
+          status: 'resolved',
+          resolvedAt: new Date(),
+        },
+      })
+    }
+
     return NextResponse.json({ success: true, session: updatedSession })
   } catch (error) {
     return apiError(error)

@@ -66,6 +66,22 @@ export async function PATCH(
     if (specialistId !== undefined) data.specialistId = specialistId ? parseInt(specialistId) : null
     if (notes !== undefined) data.description = notes
 
+    if (status === 'in_progress' && data.specialistId) {
+      const existingActive = await db.ticket.findFirst({
+        where: {
+          specialistId: data.specialistId as number,
+          status: 'in_progress',
+          id: { not: id },
+        },
+      })
+      if (existingActive) {
+        return NextResponse.json(
+          { success: false, error: 'У вас уже есть заявка в работе. Сначала завершите текущую.' },
+          { status: 409 },
+        )
+      }
+    }
+
     const updatedTicket = await db.ticket.update({
       where: { id },
       data,

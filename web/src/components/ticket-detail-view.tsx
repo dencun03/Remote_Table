@@ -143,6 +143,12 @@ export function TicketDetailView() {
           title: 'Заявка принята',
           message: `Вы приняли заявку «${ticket.title}»`,
         })
+      } else if (res.status === 409) {
+        addNotification({
+          type: 'warning',
+          title: 'Невозможно принять',
+          message: data.error || 'У вас уже есть заявка в работе.',
+        })
       }
     } catch { /* silent */ }
     setActionLoading(false)
@@ -187,7 +193,7 @@ export function TicketDetailView() {
 
   if (!ticket || !priority || !statusStyle) {
     return (
-      <div className="flex items-center justify-center py-16 text-slate-500">
+      <div className="flex items-center justify-center py-16 text-muted-foreground/70">
         Заявка не найдена
       </div>
     )
@@ -198,17 +204,17 @@ export function TicketDetailView() {
       {/* Back button */}
       <button
         onClick={goBack}
-        className="flex items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-slate-200"
+        className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
         Назад
       </button>
 
-      <Card className="border-slate-800 bg-slate-900">
+      <Card className="border-border bg-card">
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold text-white">{ticket.title}</h2>
+              <h2 className="text-lg font-bold text-foreground">{ticket.title}</h2>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge
                   variant="outline"
@@ -218,7 +224,7 @@ export function TicketDetailView() {
                 </Badge>
                 <Badge
                   variant="outline"
-                  className="text-xs font-normal text-slate-400"
+                  className="text-xs font-normal text-muted-foreground"
                 >
                   {ticket.category}
                 </Badge>
@@ -281,31 +287,31 @@ export function TicketDetailView() {
           </div>
         </CardHeader>
 
-        <Separator className="bg-slate-800" />
+        <Separator className="bg-border" />
 
         <CardContent className="space-y-6 pt-4">
           {/* Meta info */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-1">
-              <p className="text-xs text-slate-500">Дата создания</p>
-              <div className="flex items-center gap-1.5 text-sm text-slate-300">
-                <Clock className="h-3.5 w-3.5 text-slate-500" />
+              <p className="text-xs text-muted-foreground/70">Дата создания</p>
+              <div className="flex items-center gap-1.5 text-sm text-foreground/80">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground/70" />
                 {formatDate(ticket.createdAt)}
               </div>
             </div>
             {ticket.specialist && (
               <div className="space-y-1">
-                <p className="text-xs text-slate-500">Специалист</p>
-                <div className="flex items-center gap-1.5 text-sm text-slate-300">
-                  <User className="h-3.5 w-3.5 text-slate-500" />
+                <p className="text-xs text-muted-foreground/70">Специалист</p>
+                <div className="flex items-center gap-1.5 text-sm text-foreground/80">
+                  <User className="h-3.5 w-3.5 text-muted-foreground/70" />
                   {ticket.specialist.username}
                 </div>
               </div>
             )}
             {ticket.resolvedAt && (
               <div className="space-y-1">
-                <p className="text-xs text-slate-500">Дата решения</p>
-                <div className="flex items-center gap-1.5 text-sm text-slate-300">
+                <p className="text-xs text-muted-foreground/70">Дата решения</p>
+                <div className="flex items-center gap-1.5 text-sm text-foreground/80">
                   <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
                   {formatDate(ticket.resolvedAt)}
                 </div>
@@ -313,43 +319,43 @@ export function TicketDetailView() {
             )}
           </div>
 
-          <Separator className="bg-slate-800" />
+          <Separator className="bg-border" />
 
           {/* Description */}
           <div>
-            <h3 className="mb-2 text-sm font-medium text-slate-300">Описание</h3>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-400">
+            <h3 className="mb-2 text-sm font-medium text-foreground/80">Описание</h3>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
               {ticket.description}
             </p>
           </div>
 
-          <Separator className="bg-slate-800" />
+          <Separator className="bg-border" />
 
           {/* Timeline */}
           <div>
-            <h3 className="mb-3 text-sm font-medium text-slate-300">Хронология</h3>
+            <h3 className="mb-3 text-sm font-medium text-foreground/80">Хронология</h3>
             <div className="space-y-3">
               <div className="flex gap-3">
                 <div className="flex flex-col items-center">
                   <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                  <div className="h-full w-px bg-slate-800" />
+                  <div className="h-full w-px bg-border" />
                 </div>
                 <div className="pb-3">
-                  <p className="text-sm text-slate-300">Заявка создана</p>
-                  <p className="text-xs text-slate-500">{formatDate(ticket.createdAt)}</p>
+                  <p className="text-sm text-foreground/80">Заявка создана</p>
+                  <p className="text-xs text-muted-foreground/70">{formatDate(ticket.createdAt)}</p>
                 </div>
               </div>
               {ticket.specialist && (
                 <div className="flex gap-3">
                   <div className="flex flex-col items-center">
                     <div className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-                    <div className="h-full w-px bg-slate-800" />
+                    <div className="h-full w-px bg-border" />
                   </div>
                   <div className="pb-3">
-                    <p className="text-sm text-slate-300">
+                    <p className="text-sm text-foreground/80">
                       Специалист {ticket.specialist.username} принял в работу
                     </p>
-                    <p className="text-xs text-slate-500">{formatDate(ticket.updatedAt)}</p>
+                    <p className="text-xs text-muted-foreground/70">{formatDate(ticket.updatedAt)}</p>
                   </div>
                 </div>
               )}
@@ -359,8 +365,8 @@ export function TicketDetailView() {
                     <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
                   </div>
                   <div>
-                    <p className="text-sm text-slate-300">Заявка решена</p>
-                    <p className="text-xs text-slate-500">{formatDate(ticket.resolvedAt)}</p>
+                    <p className="text-sm text-foreground/80">Заявка решена</p>
+                    <p className="text-xs text-muted-foreground/70">{formatDate(ticket.resolvedAt)}</p>
                   </div>
                 </div>
               )}

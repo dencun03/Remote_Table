@@ -64,24 +64,24 @@ export function NotificationPanel() {
     <div className="relative" ref={panelRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-700/50 hover:text-slate-200"
+        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-foreground">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-lg border border-slate-700 bg-[#0d1117] shadow-xl">
-          <div className="flex items-center justify-between border-b border-slate-700/50 px-4 py-3">
-            <span className="text-sm font-medium text-slate-200">Уведомления</span>
+        <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-lg border border-input bg-card shadow-xl">
+          <div className="flex items-center justify-between border-b border-input/50 px-4 py-3">
+            <span className="text-sm font-medium text-foreground">Уведомления</span>
             {notifications.length > 0 && (
               <button
                 onClick={clearNotifications}
-                className="flex items-center gap-1 text-xs text-slate-400 transition-colors hover:text-slate-200"
+                className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
               >
                 <Trash2 className="h-3 w-3" />
                 Очистить все
@@ -91,7 +91,7 @@ export function NotificationPanel() {
 
           <div className="max-h-72 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-slate-500">
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/70">
                 <Bell className="mb-2 h-8 w-8 opacity-40" />
                 <p className="text-sm">Нет уведомлений</p>
               </div>
@@ -102,17 +102,17 @@ export function NotificationPanel() {
                 return (
                   <div
                     key={notification.id}
-                    className="group flex items-start gap-3 border-b border-slate-800/50 px-4 py-3 transition-colors last:border-0 hover:bg-slate-800/30"
+                    className="group flex items-start gap-3 border-b border-border/50 px-4 py-3 transition-colors last:border-0 hover:bg-muted/30"
                   >
                     <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${config.color}`} />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-200">
+                      <p className="text-sm font-medium text-foreground">
                         {notification.title}
                       </p>
-                      <p className="mt-0.5 text-xs text-slate-400 line-clamp-2">
+                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
                         {notification.message}
                       </p>
-                      <p className="mt-1 text-[10px] text-slate-500">
+                      <p className="mt-1 text-[10px] text-muted-foreground/70">
                         {formatRelativeTime(notification.timestamp)}
                       </p>
                     </div>
@@ -121,7 +121,7 @@ export function NotificationPanel() {
                         e.stopPropagation()
                         removeNotification(notification.id)
                       }}
-                      className="shrink-0 rounded p-0.5 text-slate-500 opacity-0 transition-all hover:text-slate-300 group-hover:opacity-100"
+                      className="shrink-0 rounded p-0.5 text-muted-foreground/70 opacity-0 transition-all hover:text-foreground/80 group-hover:opacity-100"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
